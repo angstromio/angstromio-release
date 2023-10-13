@@ -20,6 +20,9 @@ on:
   repository_dispatch:
     types: [publish]
 
+permissions:
+  contents: read
+
 jobs:
   build:
 
@@ -32,38 +35,40 @@ jobs:
         project: ['angstromio-util', 'angstromio-validator', 'angstromio-flags', 'angstromio-json']
 
     steps:
-    - name: Import GPG
-      uses: crazy-max/ghaction-import-gpg@v6
-      with:
-        gpg_private_key: ${{ secrets.GPG_SIGNING_KEY }}
-        passphrase: ${{ secrets.GPG_SIGNING_PASSWORD }}
+      - uses: actions/checkout@v3
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: 'gradle'
+      - name: Import GPG
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_SIGNING_KEY }}
+          passphrase: ${{ secrets.GPG_SIGNING_PASSWORD }}
 
-    - name: Checkout angstromio/${{ matrix.project }}
-      uses: actions/checkout@v3
-      with:
-        repository: angstromio/${{ matrix.project }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-        ref: main
-        path: ${{ github.workspace }}/${{ matrix.project }}
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
 
-    - name: Get Snapshot Version
-      id: snapshot_version
-      run: |
-        grep -r --include=gradle.properties "io.angstrom.version" . | cut -d "=" -f2
-      working-directory: ${{ github.workspace }}/${{ matrix.project }}
+      - name: Checkout angstromio/${{ matrix.project }}
+        uses: actions/checkout@v3
+        with:
+          repository: angstromio/${{ matrix.project }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          path: ${{ github.workspace }}/${{ matrix.project }}
 
-    - name: Delete Current Snapshot
-      run: |
-        curl -s -o /dev/null -w "%{http_code}\n" -X DELETE -u '${{ secrets.SONATYPE_USERNAME }}:${{ secrets.SONATYPE_PASSWORD }}' https://s01.oss.sonatype.org/content/repositories/snapshots/io/angstrom/${{ matrix.project }}/${{ steps.snapshot_version.outputs.version }}
+      - name: Get Snapshot Version
+        id: snapshot_version
+        run: |
+          grep -r --include=gradle.properties "io.angstrom.version" . | cut -d "=" -f2
+        working-directory: ${{ github.workspace }}/${{ matrix.project }}
 
-    - name: Publish Snapshot with Gradle
-      run: |
-        ./gradlew -Ppublish -PSonatypeUsername=${{ secrets.SONATYPE_USERNAME }} -PSonatypePassword=${{ secrets.SONATYPE_PASSWORD }} clean publish --no-daemon
-      working-directory: ${{ github.workspace }}/${{ matrix.project }}
+      - name: Delete Current Snapshot
+        run: |
+          curl -s -o /dev/null -w "%{http_code}\n" -X DELETE -u '${{ secrets.SONATYPE_USERNAME }}:${{ secrets.SONATYPE_PASSWORD }}' https://s01.oss.sonatype.org/content/repositories/snapshots/io/angstrom/${{ matrix.project }}/${{ steps.snapshot_version.outputs.version }}
+
+      - name: Publish Snapshot with Gradle
+        run: |
+          ./gradlew -Ppublish -PSonatypeUsername=${{ secrets.SONATYPE_USERNAME }} -PSonatypePassword=${{ secrets.SONATYPE_PASSWORD }} clean publish --no-daemon
+        working-directory: ${{ github.workspace }}/${{ matrix.project }}
