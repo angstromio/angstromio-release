@@ -33,6 +33,9 @@ jobs:
       fail-fast: true
       matrix:
         project: ['angstromio-util', 'angstromio-validator', 'angstromio-flags', 'angstromio-json']
+        include:
+          - project: 'angstromio-validator'
+            subproject: 'angstromio-validator-constraints'
 
     steps:
       - uses: actions/checkout@v3
@@ -67,6 +70,9 @@ jobs:
       - name: Delete Current Snapshot
         run: |
           curl -s -o /dev/null -w "%{http_code}\n" -X DELETE -u '${{ secrets.SONATYPE_USERNAME }}:${{ secrets.SONATYPE_PASSWORD }}' https://s01.oss.sonatype.org/content/repositories/snapshots/io/angstrom/${{ matrix.project }}/${{ steps.snapshot_version.outputs.version }}
+      - if: ${{ matrix.subproject }}
+        run: |
+          curl -s -o /dev/null -w "%{http_code}\n" -X DELETE -u '${{ secrets.SONATYPE_USERNAME }}:${{ secrets.SONATYPE_PASSWORD }}' https://s01.oss.sonatype.org/content/repositories/snapshots/io/angstrom/${{ matrix.subproject }}/${{ steps.snapshot_version.outputs.version }}
 
       - name: Publish Snapshot with Gradle
         run: |
