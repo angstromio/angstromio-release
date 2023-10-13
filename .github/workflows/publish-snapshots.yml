@@ -1,0 +1,69 @@
+# Runs via a repository dispatch event:
+#
+# { "event_type": "publish" }
+#
+
+name: Publish Snapshots
+
+env:
+  ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_SIGNING_KEY }}
+  ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_SIGNING_PASSWORD }}
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: publish-snapshots
+
+on:
+  repository_dispatch:
+    types: [publish]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      max-parallel: 1
+      fail-fast: true
+      matrix:
+        project: ['angstromio-util', 'angstromio-validator', 'angstromio-flags', 'angstromio-json']
+
+    steps:
+    - name: Import GPG
+      uses: crazy-max/ghaction-import-gpg@v6
+      with:
+        gpg_private_key: ${{ secrets.GPG_SIGNING_KEY }}
+        passphrase: ${{ secrets.GPG_SIGNING_PASSWORD }}
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'gradle'
+
+    - name: Checkout angstromio/${{ matrix.project }}
+      uses: actions/checkout@v3
+      with:
+        repository: angstromio/${{ matrix.project }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        ref: main
+        path: ${{ github.workspace }}/${{ matrix.project }}
+
+    - name: Get Snapshot Version
+      id: snapshot_version
+      run: |
+        grep -r --include=gradle.properties "io.angstrom.version" . | cut -d "=" -f2
+      working-directory: ${{ github.workspace }}/${{ matrix.project }}
+
+    - name: Delete Current Snapshot
+      run: |
+        curl -s -o /dev/null -w "%{http_code}\n" -X DELETE -u '${{ secrets.SONATYPE_USERNAME }}:${{ secrets.SONATYPE_PASSWORD }}' https://s01.oss.sonatype.org/content/repositories/snapshots/io/angstrom/${{ matrix.project }}/${{ steps.snapshot_version.outputs.version }}
+
+    - name: Publish Snapshot with Gradle
+      run: |
+        ./gradlew -Ppublish -PSonatypeUsername=${{ secrets.SONATYPE_USERNAME }} -PSonatypePassword=${{ secrets.SONATYPE_PASSWORD }} clean publish --no-daemon
+      working-directory: ${{ github.workspace }}/${{ matrix.project }}
