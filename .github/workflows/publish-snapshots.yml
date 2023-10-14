@@ -1,6 +1,9 @@
 # Runs via a repository dispatch event:
 #
-# { "event_type": "publish" }
+# { "event_type": "publish",
+#   "client_payload": {
+#     "project": "angstromio-util"
+#   }
 #
 
 name: Publish Snapshots
@@ -8,6 +11,7 @@ name: Publish Snapshots
 env:
   ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_SIGNING_KEY }}
   ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_SIGNING_PASSWORD }}
+  PROJECT: ${{ github.event.client_payload.project }}
 
 defaults:
   run:
@@ -24,7 +28,57 @@ permissions:
   contents: read
 
 jobs:
-  build:
+
+  publish-single:
+    if: ${{ github.event.client_payload.project }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Import GPG
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_SIGNING_KEY }}
+          passphrase: ${{ secrets.GPG_SIGNING_PASSWORD }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Checkout angstromio/${{ env.PROJECT }}
+        uses: actions/checkout@v3
+        with:
+          repository: angstromio/${{ env.PROJECT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          path: ${{ github.workspace }}/${{ env.PROJECT }}
+
+      - name: Get Snapshot Version
+        id: snapshot_version
+        run: |
+          grep -r --include=gradle.properties "io.angstrom.version" . | cut -d "=" -f2
+        working-directory: ${{ github.workspace }}/${{ env.PROJECT }}
+
+      - name: Delete Current Snapshot
+        run: |
+          curl -s -o /dev/null -w "%{http_code}\n" -X DELETE -u '${{ secrets.SONATYPE_USERNAME }}:${{ secrets.SONATYPE_PASSWORD }}' https://s01.oss.sonatype.org/content/repositories/snapshots/io/angstrom/${{ env.PROJECT }}/${{ steps.snapshot_version.outputs.version }}
+      - if: ${{ env.PROJECT == 'angstromio-validator' }}
+        run: |
+          curl -s -o /dev/null -w "%{http_code}\n" -X DELETE -u '${{ secrets.SONATYPE_USERNAME }}:${{ secrets.SONATYPE_PASSWORD }}' https://s01.oss.sonatype.org/content/repositories/snapshots/io/angstrom/angstromio-validator-constraints/${{ steps.snapshot_version.outputs.version }}
+
+      - name: Publish Snapshot with Gradle
+        run: |
+          ./gradlew -Ppublish -PSonatypeUsername=${{ secrets.SONATYPE_USERNAME }} -PSonatypePassword=${{ secrets.SONATYPE_PASSWORD }} clean publish --no-daemon
+        working-directory: ${{ github.workspace }}/${{ env.PROJECT }}
+
+
+  publish:
+    if: ${{ github.event.client_payload.project == null }}
 
     runs-on: ubuntu-latest
 

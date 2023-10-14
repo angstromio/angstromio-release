@@ -1,0 +1,56 @@
+# Runs via a repository dispatch event:
+#
+# { "event_type": "publish",
+#   "client_payload": {
+#     "next_release_version": "0.0.2"
+#   }
+# }
+#
+
+name: Publish Releases
+
+env:
+  NEXT_RELEASE_VERSION: ${{ github.event.client_payload.next_release_version }}
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: publish-releases
+
+on:
+  repository_dispatch:
+    types: [release]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        project: ['angstromio-util', 'angstromio-validator', 'angstromio-flags', 'angstromio-json']
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate API ACCESS Token
+        id: generate_token
+        uses: actions/create-github-app-token@9d97a4282b2c51a2f4f0465b9326399f53c890d4 # v1.5.0
+        with:
+          app_id: ${{ secrets.API_ACCESS_APP_ID }}
+          private_key: ${{ secrets.API_ACCESS_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.project }}
+
+     - name: Run Component Release
+       env:
+         GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+       run: |
+         gh workflow run release.yml --field next_release_version=${{ env.NEXT_RELEASE_VERSION }} --ref main --repo angstromio/${{ matrix.project }}
