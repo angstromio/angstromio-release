@@ -49,8 +49,8 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ matrix.project }}
 
-     - name: Run Component Release
-       env:
-         GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
-       run: |
-         gh workflow run release.yml --field next_release_version=${{ env.NEXT_RELEASE_VERSION }} --ref main --repo angstromio/${{ matrix.project }}
+      - name: Run Component Release
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          gh workflow run release.yml --field next_release_version=${{ env.NEXT_RELEASE_VERSION }} --ref main --repo angstromio/${{ matrix.project }}
