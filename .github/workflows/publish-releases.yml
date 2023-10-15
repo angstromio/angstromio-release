@@ -54,3 +54,5 @@ jobs:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           gh workflow run release.yml --field next_release_version=${{ env.NEXT_RELEASE_VERSION }} --ref main --repo angstromio/${{ matrix.project }}
+          sleep 5
+          gh run watch --repo angstromio/${{ matrix.project }} $(gh run list --repo angstromio/${{ matrix.project }} -w release.yml -L1 --json databaseId --jq '.[0].databaseId')
